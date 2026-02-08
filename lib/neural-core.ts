@@ -12,6 +12,8 @@ export interface NeuralState {
     error: string | null;
     excitement: number; // 0-1, represents "heart rate" or generation speed
     stress: number;   // 0-1, represents "cognitive load" or error rate 
+    mode: 'LOCAL_LLM' | 'RAG_SERVER';
+    ragConnected: boolean;
 }
 
 export type NeuralSubscriber = (state: NeuralState) => void;
@@ -25,14 +27,18 @@ class NeuralCore {
         isReady: false,
         error: null,
         excitement: 0,
-        stress: 0
+        stress: 0,
+        mode: 'LOCAL_LLM',
+        ragConnected: false
     };
     private subscribers: NeuralSubscriber[] = [];
 
     // Singleton instance
     private static instance: NeuralCore;
 
-    private constructor() { }
+    private constructor() {
+        this.checkRagHealth();
+    }
 
     public static getInstance(): NeuralCore {
         if (!NeuralCore.instance) {
@@ -52,6 +58,26 @@ class NeuralCore {
     private updateState(updates: Partial<NeuralState>) {
         this.state = { ...this.state, ...updates };
         this.subscribers.forEach(sub => sub(this.state));
+    }
+
+    public async checkRagHealth() {
+        try {
+            const res = await fetch('http://localhost:8000/');
+            if (res.ok) {
+                this.updateState({ ragConnected: true });
+            } else {
+                this.updateState({ ragConnected: false });
+            }
+        } catch (e) {
+            this.updateState({ ragConnected: false });
+        }
+    }
+
+    public setMode(mode: 'LOCAL_LLM' | 'RAG_SERVER') {
+        this.updateState({ mode });
+        if (mode === 'RAG_SERVER') {
+            this.checkRagHealth();
+        }
     }
 
     public async initialize() {
@@ -94,6 +120,10 @@ class NeuralCore {
         messages: { role: string; content: string }[],
         onUpdate: (chunk: string) => void
     ) {
+        if (this.state.mode === 'RAG_SERVER') {
+            return this.generateStreamRAG(messages, onUpdate);
+        }
+
         if (!this.engine) {
             throw new Error("Neural Core is not initialized");
         }
@@ -148,8 +178,69 @@ class NeuralCore {
         this.updateState({ excitement: 0.1, stress: 0 });
     }
 
+    private async generateStreamRAG(
+        messages: { role: string; content: string }[],
+        onUpdate: (chunk: string) => void
+    ) {
+        const lastMessage = messages[messages.length - 1].content;
+
+        try {
+            this.updateState({ excitement: 0.5, stress: 0.1, text: "Querying RAG..." });
+
+            const response = await fetch('http://localhost:8000/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: lastMessage })
+            });
+
+            if (!response.body) throw new Error("No response body");
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            let lastTokenTime = performance.now();
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value);
+                const now = performance.now();
+                const delta = now - lastTokenTime;
+                lastTokenTime = now;
+
+                const speed = 1000 / delta;
+                const targetExcitement = Math.min(Math.max(speed / 30, 0.4), 1.0); // RAG might be slower/chunkier
+
+                this.updateState({
+                    excitement: targetExcitement,
+                });
+
+                onUpdate(chunk);
+            }
+
+            this.updateState({ excitement: 0.1, stress: 0, text: "RAG Complete" });
+
+        } catch (e: any) {
+            console.error("RAG Error:", e);
+            this.updateState({ error: "RAG Connection Failed", stress: 1 });
+        }
+    }
+
     public isReady() {
-        return this.state.isReady;
+        return this.state.isReady || (this.state.mode === 'RAG_SERVER' && this.state.ragConnected);
+    }
+
+    public async triggerIngest() {
+        try {
+            this.updateState({ text: "Indexing Documents..." });
+            const res = await fetch('http://localhost:8000/api/ingest', { method: 'POST' });
+            const data = await res.json();
+            this.updateState({ text: `Indexed ${data.chunks} chunks`, ragConnected: true });
+            return data;
+        } catch (e) {
+            this.updateState({ error: "Ingestion Failed" });
+        }
     }
 }
 

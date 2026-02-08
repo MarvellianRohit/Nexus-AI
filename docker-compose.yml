@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    # For Mac/Metal support, usually no extra config is needed for Docker Desktop if enabled,
+    # but we can try to pass devices if specific drivers are available. 
+    # Standard Ollama image auto-detects.
+
+  chromadb:
+    image: chromadb/chromadb:latest
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - CHROMA_SERVER_HOST=chromadb
+      - CHROMA_SERVER_PORT=8000
+    depends_on:
+      chromadb:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    volumes:
+      - ./backend:/app # Hot reload for dev
+      - /Users/rohitchandra/Documents:/root/Documents # Map user docs for ingestion
+    command: >
+      sh -c " echo 'Waiting for Ollama...' && while ! curl -s http://ollama:11434/api/tags > /dev/null; do sleep 2; done && echo 'Ollama connects! Pulling models...' && curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"llama3:70b\"}' && curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"nomic-embed-text\"}' && echo 'Models ready. Starting API...' && uvicorn server:app --host 0.0.0.0 --port 8000 --reload "
+
+volumes:
+  ollama_data:
+  chroma_data:

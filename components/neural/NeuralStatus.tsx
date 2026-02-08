@@ -17,7 +17,9 @@ export function NeuralStatus() {
         isReady: false,
         error: null,
         excitement: 0,
-        stress: 0
+        stress: 0,
+        mode: 'LOCAL_LLM',
+        ragConnected: false
     });
 
     const decodedText = useMatrixDecode(state.text, 3);
@@ -83,14 +85,45 @@ export function NeuralStatus() {
 
                         {state.isReady && (
                             <div className="grid grid-cols-2 gap-2 mt-2">
-                                <div className="bg-black/40 border border-white/5 rounded-lg p-2 text-center backdrop-blur-sm">
-                                    <div className="text-[10px] text-white/50 uppercase tracking-wider">Inference</div>
-                                    <div className="text-sm font-mono font-bold text-blue-300">LOCAL</div>
-                                </div>
-                                <div className="bg-black/40 border border-white/5 rounded-lg p-2 text-center backdrop-blur-sm">
-                                    <div className="text-[10px] text-white/50 uppercase tracking-wider">Privacy</div>
-                                    <div className="text-sm font-mono font-bold text-green-300">100%</div>
-                                </div>
+                                <button
+                                    onClick={() => neuralCore.setMode(state.mode === 'LOCAL_LLM' ? 'RAG_SERVER' : 'LOCAL_LLM')}
+                                    className={cn(
+                                        "rounded-lg p-2 text-center border transition-all",
+                                        state.mode === 'RAG_SERVER'
+                                            ? "bg-purple-500/20 border-purple-500/50 text-purple-200"
+                                            : "bg-black/40 border-white/5 text-muted-foreground hover:bg-white/5"
+                                    )}
+                                >
+                                    <div className="text-[10px] uppercase tracking-wider">Mode</div>
+                                    <div className="text-sm font-mono font-bold">
+                                        {state.mode === 'RAG_SERVER' ? 'RAG' : 'LLM'}
+                                    </div>
+                                </button>
+
+                                {state.mode === 'RAG_SERVER' ? (
+                                    <button
+                                        onClick={() => neuralCore.triggerIngest()}
+                                        disabled={!state.ragConnected}
+                                        className={cn(
+                                            "rounded-lg p-2 text-center border transition-all",
+                                            state.ragConnected
+                                                ? "bg-blue-500/20 border-blue-500/50 text-blue-200 hover:bg-blue-500/30"
+                                                : "bg-red-500/10 border-red-500/20 text-red-400 cursor-not-allowed"
+                                        )}
+                                    >
+                                        <div className="text-[10px] uppercase tracking-wider">
+                                            {state.ragConnected ? "Knowledge" : "Server API"}
+                                        </div>
+                                        <div className="text-sm font-mono font-bold">
+                                            {state.ragConnected ? "INDEX" : "OFFLINE"}
+                                        </div>
+                                    </button>
+                                ) : (
+                                    <div className="bg-black/40 border border-white/5 rounded-lg p-2 text-center backdrop-blur-sm">
+                                        <div className="text-[10px] text-white/50 uppercase tracking-wider">Privacy</div>
+                                        <div className="text-sm font-mono font-bold text-green-300">100%</div>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

@@ -12,7 +12,8 @@ import {
     Settings,
     LogOut,
     ChevronLeft,
-    Menu
+    Menu,
+    Globe
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -30,11 +31,12 @@ export function Sidebar({ onCollapse }: SidebarProps) {
     };
 
     const navItems = [
-        { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
-        { icon: MessageSquare, label: "Chat", href: "/" },
-        { icon: Cpu, label: "AI Studio", href: "/studio" },
+        { icon: LayoutDashboard, label: "Overview", href: "/studio" },
+        { icon: Globe, label: "General Assistant", href: "/studio/general" }, // New
+        { icon: MessageSquare, label: "Deep Research", href: "/studio/chat" },
+        { icon: Cpu, label: "Agent Workforce", href: "/studio/agents" },
+        { icon: ImageIcon, label: "Vision Projector", href: "/studio/vision" },
         { icon: Folder, label: "Knowledge", href: "/knowledge" },
-        { icon: ImageIcon, label: "Generation", href: "/generation" },
         { icon: Users, label: "Team", href: "/team" },
     ];
 
