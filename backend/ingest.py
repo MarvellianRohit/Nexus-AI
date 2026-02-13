@@ -4,6 +4,7 @@ from langchain_community.document_loaders import PyPDFLoader, DirectoryLoader, T
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from backend.rag import rag_service, CHROMA_PATH
+from backend.hierarchical_rag import folder_summarizer, hierarchical_index
 
 # User's Research folder + Current Repo
 DATA_PATHS = [
@@ -55,8 +56,14 @@ def ingest_documents():
         chunk_overlap=200,
         add_start_index=True,
     )
+    
+    # Add folder metadata to documents before splitting
+    for doc in docs:
+        if 'source' in doc.metadata:
+            doc.metadata['source_folder'] = os.path.dirname(os.path.abspath(doc.metadata['source']))
+    
     chunks = text_splitter.split_documents(docs)
-    print(f"Split into {len(chunks)} chunks.")
+    print(f"Split into {len(chunks)} chunks with folder metadata.")
 
     # 3. Add to ChromaDB
     # 3. Add to ChromaDB
@@ -95,10 +102,15 @@ def ingest_documents():
             persist_directory=CHROMA_PATH
         )
     
+    # 4. Generate Folder Summaries
+    print("Generating Hierarchical Folder Summaries...")
+    folder_data = folder_summarizer.scan_and_summarize(DATA_PATHS)
+    hierarchical_index.save_index(folder_data)
+
     # Reload service
     rag_service.initialize_vector_store()
     
-    return {"status": "success", "chunks": len(chunks)}
+    return {"status": "success", "chunks": len(chunks), "folders": len(folder_data)}
 
 if __name__ == "__main__":
     ingest_documents()

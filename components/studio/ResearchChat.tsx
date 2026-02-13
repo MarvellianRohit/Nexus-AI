@@ -35,15 +35,14 @@ export function ResearchChat() {
         setMessages(prev => [...prev, { role: 'assistant', content: '', isThinking: true }]);
 
         try {
-            const res = await fetch('http://localhost:8000/api/chat', {
+            const response = await fetch("http://localhost:8080/api/research/query", {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: userMsg })
             });
 
-            if (!res.body) throw new Error("No response body");
-
-            const reader = res.body.getReader();
+            if (!response.body) throw new Error("No response body");
+            const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let accumulatedResponse = "";
 

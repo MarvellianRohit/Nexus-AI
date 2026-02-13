@@ -41,7 +41,7 @@ export function VisionProjector() {
         formData.append('file', image);
 
         try {
-            const res = await fetch('http://localhost:8000/api/vision/generate', {
+            const res = await fetch('http://localhost:8080/api/studio/vision', {
                 method: 'POST',
                 body: formData,
             });

@@ -1,0 +1,35 @@
+{
+    "nodes": {},
+    "edges": [
+        {
+            "source": "MLXEngine",
+            "target": "server.py",
+            "type": "USED_BY"
+        },
+        {
+            "source": "DualAgentLoop",
+            "target": "server.py",
+            "type": "USED_BY"
+        },
+        {
+            "source": "rag_service",
+            "target": "server.py",
+            "type": "USED_BY"
+        },
+        {
+            "source": "ChatInterface.tsx",
+            "target": "dual_loop.py",
+            "type": "CONSUMES"
+        },
+        {
+            "source": "neural-core.ts",
+            "target": "server.py",
+            "type": "FETC_FROM"
+        },
+        {
+            "source": "mlx_engine.py",
+            "target": "dual_loop.py",
+            "type": "DEFINES_CORE_LOGIC"
+        }
+    ]
+}

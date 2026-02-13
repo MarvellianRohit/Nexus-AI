@@ -1,0 +1,30 @@
+[
+  {
+    "folder": "/Users/rohitchandra/Documents/AI/backend",
+    "summary": "This folder contains scripts responsible for executing and managing various functionalities within the AI system.\n\nFolder Path: /Users/rohitchandra/Documents/AI/backend\nFiles:\ningest.py\nserver.py\nmemory_manager.py\nhierarchical_rag.py\nvision.py\nworkbench_server.py\nrag.py\nsearch_service.py\nauth_production.py\nwatcher.py\nmlx_engine.py\n\n\n<end_of_turn>"
+  },
+  {
+    "folder": "/Users/rohitchandra/Documents/AI/backend/creator",
+    "summary": "This folder contains scripts for generating blog content and transcribing audio. It represents a component for automating content creation and processing within the codebase. The scripts within this folder are designed to generate text content for blogs and transcribe audio recordings into text format. \n\n<end_of_turn>"
+  },
+  {
+    "folder": "/Users/rohitchandra/Documents/AI/backend/graph",
+    "summary": "This folder contains scripts for implementing and testing a component of the system responsible for indexing and managing data related to a specific domain (e.g., AI, Robotics). Scripts within this folder handle tasks such as querying, indexing, and managing data within a specific domain, potentially involving interactions with external databases or APIs. It also likely includes unit tests for ensuring the correctness and functionality of the components within this folder.\n\n\n<end_of_turn>"
+  },
+  {
+    "folder": "/Users/rohitchandra/Documents/AI/backend/distillation",
+    "summary": "This folder houses the code responsible for training a model for distilling knowledge. It contains two files: `generate_dataset.py`, which creates a dataset for training, and `train_student.py`, which trains the model.\n\n\n<end_of_turn>"
+  },
+  {
+    "folder": "/Users/rohitchandra/Documents/AI/backend/agents",
+    "summary": "This folder houses the code for individual agents, each responsible for performing a specific task within the larger system. Each agent possesses its unique functionality, defined by its Python code, and contributes to the overall mission by executing its designated tasks and interacting with other agents and components.\n\n\n<end_of_turn>"
+  },
+  {
+    "folder": "/Users/rohitchandra/Documents/AI/backend/architect",
+    "summary": "This folder contains scripts used by the system for training. ingest.py is responsible for ingesting data and preparing it for training. agent.py is responsible for executing the training process and managing the training process.\n\n\n<end_of_turn>"
+  },
+  {
+    "folder": "/Users/rohitchandra/Documents/AI/backend/researcher",
+    "summary": "This folder contains research and development related to an AI agent named \"agent\". Researchers are developing and testing various AI models and algorithms within this folder. \n\n\n<end_of_turn>"
+  }
+]

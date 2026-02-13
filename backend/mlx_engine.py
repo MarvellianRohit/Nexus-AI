@@ -8,11 +8,12 @@ import threading
 
 class MLXEngine:
     def __init__(self):
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.models_config = {
             "turbo": "mlx-community/gemma-2-9b-it-4bit",
-            "reasoning": "mlx-community/Meta-Llama-3-70B-Instruct-8bit",
-            "logic": "mlx-community/DeepSeek-Coder-V2-Lite-Instruct-4bit-mlx"
+            "reasoning": "mlx-community/Meta-Llama-3-70B-Instruct-4bit",
+            "logic": "mlx-community/DeepSeek-Coder-V2-Lite-Instruct-4bit-mlx",
+            "planner": "mlx-community/Llama-3.3-70B-Instruct-4bit"
         }
         self.loaded_models = {} # model_key -> (model, tokenizer)
         # Pre-load the Unified Model Pool (Gemma + Llama)
@@ -27,9 +28,9 @@ class MLXEngine:
             print(f"Loading model: {repo_id}...")
         
         # Configure MLX memory for massive KV-cache (128k tokens)
-        # Allocating 115GB unified memory for the active cache on the 128GB M3 Max
-        # This is "Extreme Mode", maximizing 70B teacher performance.
-        mx.metal.set_cache_limit(115 * 1024 * 1024 * 1024) 
+        # Allocating 110GB unified memory for the active cache pool on the 128GB M3 Max
+        # This allows pinning multiple massive models (Llama-3.3-70B + Llama-3-70B + DeepSeek + Gemma)
+        mx.metal.set_cache_limit(110 * 1024 * 1024 * 1024) 
         os.environ["MLX_MAX_BITS"] = "32" 
         
         # Load and store in our multi-model map
@@ -45,18 +46,20 @@ class MLXEngine:
         print(f"Model {model_key} pinned in memory.")
 
     def stream_chat(self, prompt, model_key="turbo", max_tokens=2048, temp=0.7):
-        self.load_model(model_key)
-        model, tokenizer = self.loaded_models[model_key]
-        
-        sampler = make_sampler(temp=temp)
-        for response in stream_generate(model, tokenizer, prompt=prompt, max_tokens=max_tokens, sampler=sampler):
-            yield response.text
+        with self.lock:
+            self.load_model(model_key)
+            model, tokenizer = self.loaded_models[model_key]
+            
+            sampler = make_sampler(temp=temp)
+            for response in stream_generate(model, tokenizer, prompt=prompt, max_tokens=max_tokens, sampler=sampler):
+                yield response.text
 
     def generate_response(self, prompt, model_key="turbo", temp=0.7):
-        self.load_model(model_key)
-        model, tokenizer = self.loaded_models[model_key]
-        sampler = make_sampler(temp=temp)
-        return generate(model, tokenizer, prompt=prompt, sampler=sampler)
+        with self.lock:
+            self.load_model(model_key)
+            model, tokenizer = self.loaded_models[model_key]
+            sampler = make_sampler(temp=temp)
+            return generate(model, tokenizer, prompt=prompt, sampler=sampler)
 
     def pre_load_context(self, context_text):
         """Pre-loads context into the KV-cache for 'Zero-Shot' latency."""

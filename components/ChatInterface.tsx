@@ -18,6 +18,8 @@ interface Message {
     images?: string[];
     thought?: string;
     isThinking?: boolean;
+    traceId?: string;
+    feedback?: number | null;
 }
 
 interface ArtifactVersion {
@@ -46,6 +48,7 @@ export function ChatInterface({ isInStudio = false, onCodeGenerated }: ChatInter
     const [dragActive, setDragActive] = useState(false);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [isTurbo, setIsTurbo] = useState(false);
+    const [isDualAgent, setIsDualAgent] = useState(false);
     const [activeArtifact, setActiveArtifact] = useState<Artifact | null>(null);
     const [isWorkbenchOpen, setIsWorkbenchOpen] = useState(false);
 
@@ -109,7 +112,24 @@ export function ChatInterface({ isInStudio = false, onCodeGenerated }: ChatInter
 
     const [isNeuralMode, setIsNeuralMode] = useState(false);
 
-    // Initial check for neural core availability or preference could go here
+    const handleFeedback = async (traceId: string, score: number, messageIndex: number) => {
+        try {
+            const response = await fetch("/api/feedback", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ trace_id: traceId, score }),
+            });
+            if (response.ok) {
+                setMessages((prev) => {
+                    const next = [...prev];
+                    next[messageIndex] = { ...next[messageIndex], feedback: score };
+                    return next;
+                });
+            }
+        } catch (error) {
+            console.error("Feedback error:", error);
+        }
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -173,8 +193,9 @@ export function ChatInterface({ isInStudio = false, onCodeGenerated }: ChatInter
                 });
 
             } else {
-                // --- CLOUD GEMINI EXECUTION ---
-                const response = await fetch("/api/chat", {
+                // --- CLOUD/LOCAL MLX EXECUTION ---
+                const endpoint = isDualAgent ? "/api/chat/dual-loop" : "/api/chat";
+                const response = await fetch(endpoint, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -194,10 +215,24 @@ export function ChatInterface({ isInStudio = false, onCodeGenerated }: ChatInter
                     if (done) break;
                     const text = new TextDecoder().decode(value);
 
-                    // --- THOUGHT PARSING LOGIC ---
-                    fullResponse += text;
+                    // --- TRACE ID PARSING ---
+                    if (text.startsWith("__TRACE_ID__:")) {
+                        const line = text.split('\n')[0];
+                        const id = line.replace("__TRACE_ID__:", "");
+                        aiMessage = { ...aiMessage, traceId: id };
+                        setMessages((prev) => [
+                            ...prev.slice(0, -1),
+                            { ...aiMessage },
+                        ]);
+                        // Continue processing the rest of the text if any
+                        const remaining = text.substring(line.length + 1);
+                        if (!remaining) continue;
+                        fullResponse += remaining;
+                    } else {
+                        fullResponse += text;
+                    }
 
-                    // Regex to extract thought content: <thinking> content </thinking>
+                    // --- THOUGHT PARSING LOGIC ---
                     const thoughtStart = fullResponse.indexOf('<thinking>');
                     const thoughtEnd = fullResponse.indexOf('</thinking>');
 
@@ -327,6 +362,8 @@ export function ChatInterface({ isInStudio = false, onCodeGenerated }: ChatInter
                                 content={msg.content}
                                 thought={msg.thought}
                                 isThinking={msg.isThinking}
+                                onFeedback={msg.traceId ? (score: number) => handleFeedback(msg.traceId!, score, index) : undefined}
+                                feedback={msg.feedback}
                             />
                         ))
                     )}
@@ -394,7 +431,7 @@ export function ChatInterface({ isInStudio = false, onCodeGenerated }: ChatInter
                         onChange={(e) => setInput(e.target.value)}
                         placeholder={isNeuralMode ? "Ask Neural Core (Local)..." : "Type a message..."}
                         className={cn(
-                            "pl-12 pr-28 py-6 text-base rounded-full border-white/5 focus-visible:ring-primary/50 transition-colors",
+                            "pl-12 pr-80 py-6 text-base rounded-full border-white/5 focus-visible:ring-primary/50 transition-colors",
                             isNeuralMode ? "bg-green-950/20 border-green-500/20 placeholder:text-green-500/50" : "bg-secondary/50"
                         )}
                         disabled={isLoading}
@@ -416,6 +453,24 @@ export function ChatInterface({ isInStudio = false, onCodeGenerated }: ChatInter
                         >
                             <Zap className={cn("w-3 h-3", isTurbo && "fill-current")} />
                             {isTurbo ? "TURBO:ON" : "TURBO:OFF"}
+                        </button>
+                    </div>
+
+                    {/* Dual Agent Toggle */}
+                    <div className="absolute right-52 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setIsDualAgent(!isDualAgent)}
+                            className={cn(
+                                "flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-mono font-bold border transition-all",
+                                isDualAgent
+                                    ? "bg-purple-500/20 text-purple-400 border-purple-500/50"
+                                    : "bg-white/5 text-muted-foreground border-white/10 hover:bg-white/10"
+                            )}
+                            title="Toggle Dual-Agent Verification (Architect + Auditor)"
+                        >
+                            <Sparkles className={cn("w-3 h-3", isDualAgent && "fill-current")} />
+                            {isDualAgent ? "DUAL:ON" : "DUAL:OFF"}
                         </button>
                     </div>
 

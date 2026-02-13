@@ -89,7 +89,7 @@ export function AgentManager() {
         setSocialLogs(prev => [...prev, "Engaging 40-core GPU (SDXL, Whisper, Llama-3)..."]);
 
         try {
-            const res = await fetch('http://localhost:8000/api/agents/social', {
+            const res = await fetch('http://localhost:8080/api/agents/social', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ feature_desc: featureRequest })

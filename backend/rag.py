@@ -6,7 +6,9 @@ from langchain_community.chat_models import ChatOllama
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.prompts import ChatPromptTemplate
-from typing import List
+from typing import List, Optional, Dict, Any
+from backend.hierarchical_rag import hierarchical_index
+from backend.trace_logger import trace_logger
 
 # Configuration
 MODEL_NAME = "llama3" 
@@ -65,7 +67,7 @@ class RAGService:
         questions = [q.strip() for q in response.content.split('\n') if q.strip()]
         return questions[:3]
 
-    def query(self, question: str):
+    def query(self, question: str, trace_id: Optional[str] = None):
         if not self.vector_store:
             yield "System Initializing..."
             self.initialize_vector_store()
@@ -73,7 +75,20 @@ class RAGService:
                 yield "RAG system not initialized. Please ingest documents first."
                 return
 
-        # 1. Reflective Step
+        # 1. Hierarchical Step: Find the right folder
+        yield "📂 Identifying relevant project folders from RAM index...\n"
+        relevant_folders = hierarchical_index.search_folders(question)
+        
+        if trace_id:
+            trace_logger.log_tool_call(trace_id, "TopLevelIndex.search_folders", {"query": question}, relevant_folders)
+
+        if relevant_folders:
+            folder_list = "\n".join([f"- {os.path.basename(f)}" for f in relevant_folders])
+            yield f"📍 Target Folders Identified:\n{folder_list}\n\n"
+        else:
+            yield "⚠️ No specific folders isolated. Searching globally...\n\n"
+
+        # 2. Reflective Step
         yield "🤔 Analyzing query complexity...\n"
         sub_questions = self.generate_sub_questions(question)
         if not sub_questions:
@@ -81,8 +96,18 @@ class RAGService:
         
         context_docs = []
         for q in sub_questions:
-            yield f"🔍 Searching: {q}...\n"
-            docs = self.retriever.get_relevant_documents(q)
+            yield f"🔍 Searching in project context: {q}...\n"
+            
+            # Filter by folders if identified
+            search_kwargs = {"k": 5}
+            if relevant_folders:
+                search_kwargs["filter"] = {"source_folder": {"$in": relevant_folders}}
+            
+            docs = self.vector_store.similarity_search(q, **search_kwargs)
+            
+            if trace_id:
+                trace_logger.log_tool_call(trace_id, "ChromaDB.similarity_search", {"query": q, "filter": search_kwargs.get("filter")}, [d.metadata.get('source') for d in docs])
+            
             context_docs.extend(docs)
         
         # Deduplicate

@@ -5,7 +5,7 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { User, Bot, Copy, Check, Sparkles } from "lucide-react";
+import { User, Bot, Copy, Check, Sparkles, ThumbsUp, ThumbsDown } from "lucide-react";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { ThinkingBubble } from "@/components/tools/ThinkingBubble";
@@ -15,9 +15,11 @@ interface MessageBubbleProps {
     content: string;
     thought?: string;
     isThinking?: boolean;
+    onFeedback?: (score: number) => void;
+    feedback?: number | null;
 }
 
-export function MessageBubble({ role, content, thought, isThinking }: MessageBubbleProps) {
+export function MessageBubble({ role, content, thought, isThinking, onFeedback, feedback }: MessageBubbleProps) {
     const isUser = role === "user";
 
     return (
@@ -121,6 +123,32 @@ export function MessageBubble({ role, content, thought, isThinking }: MessageBub
                     </div>
                 </div>
             </motion.div>
+
+            {/* Reliability Score (Feedback) */}
+            {!isUser && onFeedback && (
+                <div className="flex items-center gap-2 mt-2 ml-11">
+                    <button
+                        onClick={() => onFeedback(1)}
+                        className={cn(
+                            "p-1.5 rounded-md hover:bg-muted transition-colors",
+                            feedback === 1 ? "text-green-500 bg-green-500/10" : "text-muted-foreground"
+                        )}
+                        title="Helpful"
+                    >
+                        <ThumbsUp size={14} fill={feedback === 1 ? "currentColor" : "none"} />
+                    </button>
+                    <button
+                        onClick={() => onFeedback(0)}
+                        className={cn(
+                            "p-1.5 rounded-md hover:bg-muted transition-colors",
+                            feedback === 0 ? "text-red-500 bg-red-500/10" : "text-muted-foreground"
+                        )}
+                        title="Not Helpful"
+                    >
+                        <ThumbsDown size={14} fill={feedback === 0 ? "currentColor" : "none"} />
+                    </button>
+                </div>
+            )}
         </div>
     );
 }

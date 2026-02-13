@@ -35,7 +35,7 @@ export function GeneralChat() {
         setMessages(prev => [...prev, { role: 'assistant', content: '', isThinking: true }]);
 
         try {
-            const res = await fetch('http://localhost:8000/api/general/chat', {
+            const res = await fetch('http://localhost:8080/api/general/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: userMsg })

@@ -7,6 +7,8 @@ import uvicorn
 import asyncio
 import os
 import json
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 # Import backend modules
 from backend.rag import rag_service
@@ -16,6 +18,9 @@ from backend.vision import generate_code_from_image
 from backend.search_service import search_service
 from backend.architect.agent import architect_agent
 from backend.architect.ingest import ingest_codebase
+from backend.agents.dual_loop import dual_agent_manager
+from backend.graph.impact_tool import analyze_impact
+from backend.trace_logger import trace_logger
 
 # --- Data Models (Must be defined before use) ---
 class ChatRequest(BaseModel):
@@ -24,6 +29,10 @@ class ChatRequest(BaseModel):
 
 class AgentRequest(BaseModel):
     feature: str
+
+class FeedbackRequest(BaseModel):
+    trace_id: str
+    score: int # 1 for thumbs up, 0 for thumbs down
 
 # --- App Initialization ---
 app = FastAPI()
@@ -40,6 +49,16 @@ app.add_middleware(
 # Static Files (Social Media Assets)
 os.makedirs("backend/static/social", exist_ok=True)
 app.mount("/static/social", StaticFiles(directory="backend/static/social"), name="social")
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    body = await request.body()
+    print(f"DEBUG: Validation Error Body: {body.decode()}")
+    print(f"DEBUG: Validation Error: {exc}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": body.decode()},
+    )
 
 # --- Routes ---
 
@@ -97,8 +116,15 @@ async def chat(request: AdvancedChatRequest):
             profile = json.load(f)
             user_context = f"User Profile: {json.dumps(profile)}\n\n"
 
-    system_prompt = f"{user_context}You are Nexus-AI, a high-performance assistant. Use deep reasoning for complex tasks.\n\n" \
-                    "IMPORTANT: When generating UI components, HTML, or React code, always wrap the code block in specialized <artifact> tags.\n" \
+    system_prompt = f"{user_context}You are Nexus-AI, a high-performance assistant. Use deep reasoning for complex tasks.\n\n"
+    
+    # Load Automated Improvements
+    updates_path = "backend/system_prompt_updates.md"
+    if os.path.exists(updates_path):
+        with open(updates_path, 'r') as f:
+            system_prompt += f"--- LEARNED IMPROVEMENTS ---\n{f.read()}\n\n"
+
+    system_prompt += "IMPORTANT: When generating UI components, HTML, or React code, always wrap the code block in specialized <artifact> tags.\n" \
                     "Example:\n<artifact type=\"react\">\n```tsx\n...\n```\n</artifact>\n" \
                     "The frontend will render these artifacts in a dedicated Canvas."
     
@@ -119,22 +145,76 @@ async def chat(request: AdvancedChatRequest):
         return StreamingResponse(iter([result]), media_type="text/plain")
 
     full_prompt = f"{system_prompt}\nUser: {request.message}\nAssistant:"
+    
+    # Create Trace
+    trace_id = trace_logger.create_trace(request.message, system_prompt=system_prompt)
 
     async def generate():
+        full_response = ""
         try:
+            # Yield trace_id first so frontend can associate feedback
+            yield f"__TRACE_ID__:{trace_id}\n"
+            
             if request.use_mlx:
                 from backend.mlx_engine import mlx_engine
                 # Use the Dynamic Model Router for intelligent triage
                 for chunk in mlx_engine.routed_stream(request.message, system_prompt=system_prompt):
+                    full_response += chunk
                     yield chunk
             else:
-                # Fallback to existing RAG service
-                for chunk in rag_service.query(request.message):
+                # Fallback to existing RAG service with tracing
+                for chunk in rag_service.query(request.message, trace_id=trace_id):
+                    full_response += chunk
                     yield chunk
+            
+            # Log final answer and thoughts
+            import re
+            thoughts = re.findall(r'<thinking>(.*?)</thinking>', full_response, re.DOTALL)
+            for thought in thoughts:
+                trace_logger.log_thought(trace_id, thought.strip())
+            
+            # Remove thinking tags from final answer for cleaner logging if desired, 
+            # but usually we want to know what was sent.
+            trace_logger.log_final_answer(trace_id, full_response)
         except Exception as e:
-            yield f"Error: {str(e)}"
+            error_msg = f"Error: {str(e)}"
+            yield error_msg
+            trace_logger.log_final_answer(trace_id, error_msg)
 
     return StreamingResponse(generate(), media_type="text/plain")
+
+@app.post("/api/feedback")
+async def log_feedback(request: FeedbackRequest):
+    try:
+        trace_logger.log_feedback(request.trace_id, request.score)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/chat/dual-loop")
+def dual_loop_chat(request: AdvancedChatRequest):
+    """
+    Executes the Dual-Agent Verification Loop (Architect & Auditor).
+    """
+    def generate_loop():
+        try:
+            for chunk in dual_agent_manager.stream_loop(request.message):
+                yield chunk
+        except Exception as e:
+            yield f"Error in Dual-Agent Loop: {str(e)}"
+
+    return StreamingResponse(generate_loop(), media_type="text/plain")
+
+@app.get("/api/graph/impact")
+def get_impact(entity: str):
+    """
+    Returns the impact report for a code entity.
+    """
+    try:
+        report = analyze_impact(entity)
+        return report
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # 2. General Assistant (Gemini Pro)
 @app.post("/api/general/chat")
